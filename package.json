@@ -1,0 +1,31 @@
+{
+  "name": "@cinatra-ai/blog-idea-generator-agent",
+  "version": "0.1.7",
+  "license": "Apache-2.0",
+  "description": "Stateless leaf agent that takes a blog brief plus optional context (audience, count, tone, existing ideas, reference content) and returns count blog post ideas with title + summary + 3-7 outline points each. Single LLM round-trip; no MCP primitives; no HITL; no web_search. Returns strict JSON {ideas:[{title,summary,outline}], notes}.",
+  "type": "module",
+  "cinatra": {
+    "apiVersion": "cinatra.ai/v1",
+    "kind": "agent",
+    "dependencies": [
+      {
+        "packageName": "@cinatra-ai/context-selection-agent",
+        "edgeType": "runtime",
+        "versionConstraint": {
+          "kind": "semver-range",
+          "range": "*"
+        },
+        "requirement": "required",
+        "kind": "agent"
+      }
+    ],
+    "agentDependencies": {
+      "@cinatra-ai/context-selection-agent": "^0.1.1"
+    },
+    "produces": [
+      {
+        "extension": "@cinatra-ai/blog-idea-artifact"
+      }
+    ]
+  }
+}
