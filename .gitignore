@@ -1,0 +1,21 @@
+# Dependencies (pnpm; no committed lockfile — see ci.yml)
+node_modules/
+
+# Build output (tsconfig outDir)
+dist/
+
+# Test coverage
+coverage/
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
