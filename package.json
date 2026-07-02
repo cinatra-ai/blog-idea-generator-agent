@@ -30,6 +30,7 @@
       {
         "extension": "@cinatra-ai/blog-idea-artifact"
       }
-    ]
+    ],
+    "consumes": []
   }
 }
