@@ -3,7 +3,7 @@
   "component_type": "Flow",
   "id": "blog-idea-generator-agent-flow",
   "name": "Blog Idea Generator Agent",
-  "description": "Stateless leaf agent that takes a blog brief plus optional context (audience, count, tone, existing ideas, reference content) and returns count blog post ideas with title + summary + 3-7 outline points each. Single LLM round-trip; no MCP primitives; no HITL; no web_search. Returns strict JSON {ideas:[{title,summary,outline}], notes}.",
+  "description": "Stateless leaf agent that takes a blog brief plus optional context (audience, count, tone, existing ideas, reference content) and returns count blog post ideas with title + summary + 3-7 outline points each, plus a single markdown idea-batch document (ideaBatchTitle, ideaBatchDocument) that the host persists as a @cinatra-ai/blog-idea-artifact. Single LLM round-trip; no MCP primitives; no HITL; no web_search. Returns strict JSON {ideas:[{title,summary,outline}], ideaBatchTitle, ideaBatchDocument, notes}.",
   "metadata": {
     "cinatra": {
       "type": "flow",
@@ -99,6 +99,14 @@
           "type": "object"
         }
       }
+    },
+    {
+      "title": "ideaBatchTitle",
+      "type": "string"
+    },
+    {
+      "title": "ideaBatchDocument",
+      "type": "string"
     },
     {
       "title": "notes",
@@ -238,6 +246,30 @@
         "$component_ref": "end"
       },
       "destination_input": "ideas"
+    },
+    {
+      "component_type": "DataFlowEdge",
+      "name": "generate_ideaBatchTitle_to_end_ideaBatchTitle",
+      "source_node": {
+        "$component_ref": "generate"
+      },
+      "source_output": "ideaBatchTitle",
+      "destination_node": {
+        "$component_ref": "end"
+      },
+      "destination_input": "ideaBatchTitle"
+    },
+    {
+      "component_type": "DataFlowEdge",
+      "name": "generate_ideaBatchDocument_to_end_ideaBatchDocument",
+      "source_node": {
+        "$component_ref": "generate"
+      },
+      "source_output": "ideaBatchDocument",
+      "destination_node": {
+        "$component_ref": "end"
+      },
+      "destination_input": "ideaBatchDocument"
     },
     {
       "component_type": "DataFlowEdge",
@@ -412,7 +444,7 @@
       "http_method": "POST",
       "data": {
         "agent_id": "blog-idea-generator-agent",
-        "system": "You are a stateless blog-idea-generator agent. Follow the SKILL.md step-by-step. Return a single JSON object {ideas:[{title, summary, outline:[...]}], notes} \u2014 nothing else; no markdown wrapping; no prose preface.",
+        "system": "You are a stateless blog-idea-generator agent. Follow the SKILL.md step-by-step. Do NOT call any MCP tool. Return a single JSON object with exactly these four top-level keys:\n- \"ideas\": [{title, summary, outline:[...]}]\n- \"ideaBatchTitle\": a short human-readable title for this idea batch derived from the brief, e.g. \"Blog ideas: <brief gist> (<N> ideas)\".\n- \"ideaBatchDocument\": a single Markdown document rendering EVERY generated idea, one section per idea in the form \"## <title>\\n\\n<summary>\\n\\n### Outline\\n- <point>\\n\" (ideas in the same order as the ideas array).\n- \"notes\": 1-2 sentences on clustering/exclusions.\nNothing else; no markdown wrapping of the JSON; no prose preface.",
         "user": "Generate count distinct blog post ideas for the brief below. Each idea needs a title (\u226480 chars), a 1-2 sentence summary, and 3-7 outline points covering the post arc. Respect tone if provided. Avoid topics in existingIdeasContext.\nInputs:\n- brief: {{ brief }}\n- audience: {{ audience }}\n- count: {{ count }}\n- tone: {{ tone }}\n- existingIdeasContext: {{ existingIdeasContext }}\n- referenceContent: {{ referenceContent }}\n- contextSlotBindings: {{ contextSlotBindings }}",
         "agent_run_id": "{{ agent_run_id }}",
         "cinatra_llm": {
@@ -495,16 +527,24 @@
           }
         },
         {
+          "title": "ideaBatchTitle",
+          "type": "string"
+        },
+        {
+          "title": "ideaBatchDocument",
+          "type": "string"
+        },
+        {
           "title": "notes",
           "type": "string"
         }
       ],
       "metadata": {
         "cinatra": {
-          "riskClass": "write_safe",
+          "riskClass": "read_only",
           "requiresApproval": false,
           "packageName": "@cinatra-ai/blog-idea-generator-agent",
-          "description": "Single ApiNode \u2192 /api/llm-bridge. Bridge auto-discovers SKILL.md from agents/cinatra/blog-idea-generator-agent/skills/blog-idea-generator-agent/SKILL.md (via agent_id). metadata.cinatra.toolboxes is INTENTIONALLY OMITTED so default toolbox injection runs; the SKILL.md instructs the LLM NOT to call any MCP primitive \u2014 ideas are generated purely from inline inputs. No HITL gates; the LLM returns the JSON envelope and the run completes."
+          "description": "Single ApiNode \u2192 /api/llm-bridge. Bridge auto-discovers SKILL.md from agents/cinatra/blog-idea-generator-agent/skills/blog-idea-generator-agent/SKILL.md (via agent_id). metadata.cinatra.toolboxes is INTENTIONALLY OMITTED so default toolbox injection runs; the SKILL.md instructs the LLM NOT to call any MCP primitive \u2014 ideas are generated purely from inline inputs. No HITL gates; the LLM returns the JSON envelope and the run completes. The host run-completion materializer then persists ideaBatchDocument as ONE @cinatra-ai/blog-idea-artifact per run via the declarative EndNode binding \u2014 no artifact tool call exists in this flow."
         }
       }
     },
@@ -522,6 +562,24 @@
             }
           },
           "default": []
+        },
+        {
+          "title": "ideaBatchTitle",
+          "type": "string",
+          "default": ""
+        },
+        {
+          "title": "ideaBatchDocument",
+          "type": "string",
+          "default": "",
+          "cinatra": {
+            "artifact": {
+              "extension": "@cinatra-ai/blog-idea-artifact",
+              "contentFrom": "ideaBatchDocument",
+              "declaredMime": "text/markdown",
+              "titleFrom": "ideaBatchTitle"
+            }
+          }
         },
         {
           "title": "notes",
