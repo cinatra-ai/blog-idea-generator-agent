@@ -11,6 +11,7 @@
   "cinatra": {
     "apiVersion": "cinatra.ai/v1",
     "kind": "agent",
+    "displayName": "Blog Idea Generator Agent",
     "dependencies": [
       {
         "packageName": "@cinatra-ai/context-selection-agent",
@@ -31,6 +32,15 @@
         "extension": "@cinatra-ai/blog-idea-artifact"
       }
     ],
-    "consumes": []
+    "consumes": [],
+    "packageType": "agent",
+    "manifestVersion": 1,
+    "sourceTemplateId": "blog-idea-generator-agent-flow",
+    "sourceVersionId": "1db2a077-7561-448f-b4e8-fb113a4ae861",
+    "sourceVersionNumber": 1,
+    "riskLevel": "low",
+    "hasApprovalGates": true,
+    "toolAccess": [],
+    "ownerOrgId": null
   }
 }
