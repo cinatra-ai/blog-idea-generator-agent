@@ -96,7 +96,27 @@
       "type": "array",
       "json_schema": {
         "items": {
-          "type": "object"
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "outline": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "title",
+            "summary",
+            "outline"
+          ],
+          "additionalProperties": false
         }
       }
     },
@@ -522,7 +542,27 @@
           "type": "array",
           "json_schema": {
             "items": {
-              "type": "object"
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "outline": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "title",
+                "summary",
+                "outline"
+              ],
+              "additionalProperties": false
             }
           }
         },
@@ -558,7 +598,27 @@
           "type": "array",
           "json_schema": {
             "items": {
-              "type": "object"
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "outline": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "title",
+                "summary",
+                "outline"
+              ],
+              "additionalProperties": false
             }
           },
           "default": []
