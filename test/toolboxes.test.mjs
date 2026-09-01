@@ -104,3 +104,33 @@ test("the generate node's prompt states the four-key contract and matches the de
     ["ideaBatchDocument", "ideaBatchTitle", "ideas", "notes"],
   );
 });
+
+// A node that declares an empty toolbox list must also SAY so in its own
+// instructions. The host's canonical-extension invariant reads the bridge
+// node's `data.system` and requires one of a fixed set of tool-discipline
+// phrasings; a paraphrase outside that set does not satisfy it, so the
+// alternation below is copied verbatim from the host's own check and the
+// prompt carries one of its literal phrasings.
+const NO_TOOL_DISCLAIMER =
+  /NO MCP primitives|MUST NOT call any (MCP|tool)|Never call any tool|Do NOT call any (MCP )?tool|Do not call any tool|no MCP primitives/i;
+
+test("every node declaring an empty toolbox list says so in its own prompt", () => {
+  const emptyToolboxNodes = bridgeNodes.filter(([, node]) => {
+    const data = node.data || {};
+    return (
+      Object.prototype.hasOwnProperty.call(data, "toolbox_ids") &&
+      Array.isArray(data.toolbox_ids) &&
+      data.toolbox_ids.length === 0
+    );
+  });
+  assert.ok(emptyToolboxNodes.length > 0, "expected at least one node declaring an empty toolbox list");
+  for (const [id, node] of emptyToolboxNodes) {
+    const system = (node.data || {}).system;
+    assert.equal(typeof system, "string", `node ${id}: expected a data.system prompt`);
+    assert.match(
+      system,
+      NO_TOOL_DISCLAIMER,
+      `node ${id}: the prompt must state that this turn calls no tool — the declaration alone is not enough`,
+    );
+  }
+});
