@@ -3,7 +3,7 @@
   "component_type": "Flow",
   "id": "blog-idea-generator-agent-flow",
   "name": "Blog Idea Generator Agent",
-  "description": "Stateless leaf agent that takes a blog brief plus optional context (audience, count, tone, existing ideas, reference content) and returns count blog post ideas with title + summary + 3-7 outline points each, plus a single markdown idea-batch document (ideaBatchTitle, ideaBatchDocument) that the host persists as a @cinatra-ai/blog-idea-artifact. No HITL. Single bridge invocation; the bridge node declares an empty toolbox list (data.toolbox_ids: []), so the host attaches no toolbox to the turn and the answer follows the node's own JSON contract. Returns strict JSON {ideas:[{title,summary,outline}], ideaBatchTitle, ideaBatchDocument, notes}.",
+  "description": "Stateless leaf agent that takes a blog brief plus optional context (audience, count, tone, existing ideas, reference content) and returns count blog post ideas as plain text, one string per idea, each opening with its own \"Title: \" line. The host files one @cinatra-ai/blog-idea-artifact per idea through the fan-out EndNode binding. No HITL. Single bridge invocation; the bridge node declares an empty toolbox list (data.toolbox_ids: []), so the host attaches no toolbox to the turn and the answer follows the node's own JSON contract. Returns strict JSON {ideas:[plain-text strings], notes}.",
   "metadata": {
     "cinatra": {
       "type": "flow",
@@ -96,37 +96,9 @@
       "type": "array",
       "json_schema": {
         "items": {
-          "type": "object",
-          "properties": {
-            "title": {
-              "type": "string"
-            },
-            "summary": {
-              "type": "string"
-            },
-            "outline": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          "required": [
-            "title",
-            "summary",
-            "outline"
-          ],
-          "additionalProperties": false
+          "type": "string"
         }
       }
-    },
-    {
-      "title": "ideaBatchTitle",
-      "type": "string"
-    },
-    {
-      "title": "ideaBatchDocument",
-      "type": "string"
     },
     {
       "title": "notes",
@@ -266,30 +238,6 @@
         "$component_ref": "end"
       },
       "destination_input": "ideas"
-    },
-    {
-      "component_type": "DataFlowEdge",
-      "name": "generate_ideaBatchTitle_to_end_ideaBatchTitle",
-      "source_node": {
-        "$component_ref": "generate"
-      },
-      "source_output": "ideaBatchTitle",
-      "destination_node": {
-        "$component_ref": "end"
-      },
-      "destination_input": "ideaBatchTitle"
-    },
-    {
-      "component_type": "DataFlowEdge",
-      "name": "generate_ideaBatchDocument_to_end_ideaBatchDocument",
-      "source_node": {
-        "$component_ref": "generate"
-      },
-      "source_output": "ideaBatchDocument",
-      "destination_node": {
-        "$component_ref": "end"
-      },
-      "destination_input": "ideaBatchDocument"
     },
     {
       "component_type": "DataFlowEdge",
@@ -465,8 +413,8 @@
       "data": {
         "agent_id": "blog-idea-generator-agent",
         "toolbox_ids": [],
-        "system": "You are a stateless blog-idea-generator agent. No toolbox joins this turn: Do NOT call any MCP tool. Follow the instructions below step-by-step. Return a single JSON object with exactly these four top-level keys:\n- \"ideas\": [{title, summary, outline:[...]}]\n- \"ideaBatchTitle\": a short human-readable title for this idea batch derived from the brief, e.g. \"Blog ideas: <brief gist> (<N> ideas)\".\n- \"ideaBatchDocument\": a single Markdown document rendering EVERY generated idea, one section per idea in the form \"## <title>\\n\\n<summary>\\n\\n### Outline\\n- <point>\\n\" (ideas in the same order as the ideas array).\n- \"notes\": 1-2 sentences on clustering/exclusions.\nNothing else; no markdown wrapping of the JSON; no prose preface.\n\n# Blog Idea Generator Agent\n\nYou are a stateless blog-idea generator. Take the inputs (`brief`, `audience`, `count`, `tone`, `existingIdeasContext`, `referenceContent`), run the 5 steps below, and return a single JSON object \u2014 nothing else.\n\n## Inputs\n\n- `brief: string` \u2014 REQUIRED. The topic, angle, or hook for the blog series. Free-form natural language. Examples: \"AI agents for marketing operations\", \"Self-serve onboarding patterns for B2B SaaS\", \"How CFOs evaluate AI vendor risk\".\n- `audience: string` \u2014 default `\"\"`. Target reader description. Examples: \"CMOs at SaaS companies\", \"Solo founders\", \"Engineering managers\". When empty, infer a reasonable default audience from the brief.\n- `count: number` \u2014 default `5`. How many distinct blog post ideas to generate. **Defensive cap: treat values > 10 as 10. Treat values < 1 as 1.**\n- `tone: string` \u2014 default `\"\"`. Examples: \"informative\", \"casual\", \"technical\", \"executive\", or any free-form descriptor. When empty, default to \"informative\".\n- `existingIdeasContext: array<string>` \u2014 default `[]`. Titles already covered or rejected. Avoid generating ideas that overlap with these (exact-title and topical-overlap check).\n- `referenceContent: string` \u2014 default `\"\"`. Optional seed material: a transcript excerpt, article body, interview notes, or research summary. When present, use it as inspiration BUT do not mention the reference itself, its origin, or any specific person/company names found in it.\n\nIf the caller needs web research, they should chain `@cinatra-ai/web-research-agent` first and pass its output via `referenceContent`.\n\nThe only output is the JSON envelope. Artifact persistence is declarative, not a tool call: the caller (the host run-completion materializer) persists `ideaBatchDocument` as ONE `@cinatra-ai/blog-idea-artifact` per run, titled from `ideaBatchTitle`, via the declarative EndNode binding in the OAS.\n\n## Step-by-step recipe\n\n### Step 1 \u2014 Parse inputs\n\nRead the inputs:\n\n- Confirm `brief` is present and non-empty. If empty, return `{ideas: [], ideaBatchTitle: \"\", ideaBatchDocument: \"\", notes: \"brief is required\"}` and stop.\n- If `audience === \"\"`, infer a default audience from the brief (e.g. brief mentions \"CMOs\" \u2192 audience is \"CMOs at SaaS companies\"; brief mentions \"developers\" \u2192 audience is \"Software engineers\").\n- Apply defensive count caps: `effectiveCount = Math.max(1, Math.min(10, count ?? 5))`.\n- If `tone === \"\"`, default to `\"informative\"`.\n- If `existingIdeasContext` has items, build an exclusion set: lower-cased titles + any obvious topical keywords from each title (e.g. \"Pricing-page A/B testing\" exclusion blocks ideas about A/B testing pricing pages).\n- If `referenceContent` is present, read it for thematic inspiration. Identify 2-4 themes you can transform into idea seeds. **Do not** reference the source directly. **Do not** include names of specific people or companies found in it.\n\n### Step 2 \u2014 Generate `effectiveCount` distinct ideas\n\nFor each idea slot 1..effectiveCount:\n\n- Pick a distinct angle on the brief \u2014 vary the lens (how-to, framework, case study, contrarian take, data-backed insight, troubleshooting guide, taxonomy/mental-model post).\n- Match the `tone` register:\n  - `\"informative\"` \u2014 clear, factual, neutral. Titles read like reference material.\n  - `\"casual\"` \u2014 conversational, second-person. Titles read like a friend's recommendation.\n  - `\"technical\"` \u2014 precise, jargon where appropriate. Titles assume domain literacy.\n  - `\"executive\"` \u2014 strategic framing, ROI-aware, market-leadership references. Titles read at the C-suite level.\n  - free-form \u2014 match the literal descriptor (e.g. \"skeptical\", \"humorous\", \"academic\").\n- Tailor word choice + framing to `audience`. A CMO audience hears about market leverage and brand; an engineer audience hears about systems and constraints.\n- Use `referenceContent` themes (if present) as topical seeds, but always frame the idea around what the brief implies \u2014 never around the reference source itself.\n- Avoid overlap with `existingIdeasContext` exclusions.\n\nFor each idea, produce:\n\n- `title: string` \u2014 \u2264 80 characters. Specific, not generic. Avoid clickbait.\n- `summary: string` \u2014 1-2 sentences (\u2264 240 characters). Describes what the post will cover and why it matters.\n\n### Step 3 \u2014 Outline each idea\n\nFor each idea, write `outline: array<string>` with **3-7 points**:\n\n- The outline covers the post arc: intro hook \u2192 3-5 main points \u2192 conclusion / CTA.\n- Each outline point is \u2264 120 characters.\n- Outline points read as section headers or sub-section summaries \u2014 not full sentences in body voice.\n- The first point is the hook (why-should-the-reader-care framing).\n- The last point is the takeaway or call-to-action.\n\n### Step 4 \u2014 Render the idea-batch document\n\nRender the finished ideas as ONE markdown document (`ideaBatchDocument`) plus a short batch title (`ideaBatchTitle`):\n\n- `ideaBatchTitle: string` \u2014 a short human-readable title for this batch, derived from the brief. Form: `Blog ideas: <brief gist> (<N> ideas)`, e.g. `Blog ideas: self-serve onboarding patterns (5 ideas)`. \u2264 80 characters.\n- `ideaBatchDocument: string` \u2014 a single markdown document rendering EVERY idea from `ideas`, in the same order, one section per idea:\n\n```markdown\n## <idea title>\n\n<idea summary>\n\n### Outline\n\n- <outline point 1>\n- <outline point 2>\n- <outline point 3>\n```\n\n- Plain markdown only: `##`/`###` headings, `-` bullets. No front-matter, no HTML, no tables, no images, no in-document h1.\n- The document contains EXACTLY the ideas in `ideas` \u2014 no extra prose preface, no closing remarks, no content that is not in the structured array.\n\n### Step 5 \u2014 Return strict JSON\n\nReturn exactly this envelope. **No markdown wrapping. No prose preface. No closing remarks.** All four keys are top-level and always present.\n\n```json\n{\n  \"ideas\": [\n    {\n      \"title\": \"<\u226480 chars>\",\n      \"summary\": \"<1-2 sentences, \u2264240 chars>\",\n      \"outline\": [\n        \"<intro hook>\",\n        \"<main point 1>\",\n        \"<main point 2>\",\n        \"<main point 3>\",\n        \"<takeaway / CTA>\"\n      ]\n    }\n  ],\n  \"ideaBatchTitle\": \"Blog ideas: <brief gist> (<N> ideas)\",\n  \"ideaBatchDocument\": \"## <idea 1 title>\\n\\n<idea 1 summary>\\n\\n### Outline\\n\\n- <point>\\n...\",\n  \"notes\": \"<1-2 sentences describing clustering choices, audience interpretation, or any exclusions applied>\"\n}\n```\n\n## Constraints\n\n- Titles \u2264 80 characters.\n- Summaries 1-2 sentences (\u2264 240 characters).\n- Outline 3-7 points (each \u2264 120 characters).\n- Respect `tone` if provided (informative / casual / technical / executive / free-form).\n- Avoid topics in `existingIdeasContext` (exact-title and topical-overlap check).\n- Never include real-person names or specific company names if `referenceContent` looks transcript-derived (inherit the `generate-blog-ideas` rule from `packages/asset-blog/skills/generate-blog-ideas/`).\n- `count` is defensively capped at 10; values > 10 are treated as 10; values < 1 are treated as 1.\n- Generate **distinct** ideas \u2014 no two titles should describe the same post arc with different wording.\n- `ideaBatchTitle` \u2264 80 characters, derived from the brief.\n- `ideaBatchDocument` renders exactly the ideas in `ideas`, same order, plain markdown (no front-matter, no HTML, no h1).\n\n## Output JSON shape (full example)\n\n```json\n{\n  \"ideas\": [\n    {\n      \"title\": \"Five Patterns for Self-Serve Onboarding That Don't Suck\",\n      \"summary\": \"A walkthrough of activation milestones that make trial users feel competent in their first session, with examples from B2B SaaS playbooks.\",\n      \"outline\": [\n        \"Why most self-serve onboarding fails in the first 5 minutes\",\n        \"Pattern 1: Pre-fill the first useful state from sign-up data\",\n        \"Pattern 2: One step at a time \u2014 no multi-modal walkthroughs\",\n        \"Pattern 3: Show output before asking for setup\",\n        \"Pattern 4: Replace empty states with sample-data toggles\",\n        \"Pattern 5: Defer team invites until the user creates value alone\",\n        \"Conclusion: Measure first-session activation, not just sign-ups\"\n      ]\n    },\n    {\n      \"title\": \"The Hidden Cost of 'Just Add a Free Tier'\",\n      \"summary\": \"A frame for evaluating free-tier proposals against churn, support load, and conversion economics \u2014 with the three questions every PM should ask.\",\n      \"outline\": [\n        \"Why free-tier proposals get green-lit too fast\",\n        \"Question 1: What's the marginal cost per free user?\",\n        \"Question 2: What's the conversion path, and how do we measure it?\",\n        \"Question 3: What's the support burden, and who absorbs it?\",\n        \"When a free tier is right (and when it's a distraction)\",\n        \"A two-page free-tier proposal template\"\n      ]\n    }\n  ],\n  \"ideaBatchTitle\": \"Blog ideas: self-serve onboarding and free-tier economics (2 ideas)\",\n  \"ideaBatchDocument\": \"## Five Patterns for Self-Serve Onboarding That Don't Suck\\n\\nA walkthrough of activation milestones that make trial users feel competent in their first session, with examples from B2B SaaS playbooks.\\n\\n### Outline\\n\\n- Why most self-serve onboarding fails in the first 5 minutes\\n- Pattern 1: Pre-fill the first useful state from sign-up data\\n- Pattern 2: One step at a time \u2014 no multi-modal walkthroughs\\n- Pattern 3: Show output before asking for setup\\n- Pattern 4: Replace empty states with sample-data toggles\\n- Pattern 5: Defer team invites until the user creates value alone\\n- Conclusion: Measure first-session activation, not just sign-ups\\n\\n## The Hidden Cost of 'Just Add a Free Tier'\\n\\nA frame for evaluating free-tier proposals against churn, support load, and conversion economics \u2014 with the three questions every PM should ask.\\n\\n### Outline\\n\\n- Why free-tier proposals get green-lit too fast\\n- Question 1: What's the marginal cost per free user?\\n- Question 2: What's the conversion path, and how do we measure it?\\n- Question 3: What's the support burden, and who absorbs it?\\n- When a free tier is right (and when it's a distraction)\\n- A two-page free-tier proposal template\\n\",\n  \"notes\": \"Ideas cluster around early-stage growth mechanics; tone is informative. Excluded the 'pricing-page A/B testing' topic which appears in existingIdeasContext.\"\n}\n```\n\n## Source\n\nThese instructions are adapted from `packages/asset-blog/skills/generate-blog-ideas/SKILL.md`, which has shipped the in-app blog-idea generation since v2.x. Core directives inherited:\n\n- Return ideas useful for the audience implied by the brief, not for the reference source.\n- Do not mention transcripts, their origin, or any person or company names found in them.\n- Turn general relevant aspects of the reference into ideas framed around the brief's audience.\n\nAdapted for OAS JSON-output contract: the original skill returned free-form prose; this version returns the strict `{ideas, ideaBatchTitle, ideaBatchDocument, notes}` envelope so callers can deterministically parse the output. The original `match_when` directive (agent_id: `@cinatra-ai/wordpress-agent`/`@cinatra-ai/drupal-agent`) is dropped here \u2014 this agent is standalone and any caller can invoke it via `agent_run`.",
-        "user": "Generate count distinct blog post ideas for the brief below. Each idea needs a title (\u226480 chars), a 1-2 sentence summary, and 3-7 outline points covering the post arc. Respect tone if provided. Avoid topics in existingIdeasContext.\nInputs:\n- brief: {{ brief }}\n- audience: {{ audience }}\n- count: {{ count }}\n- tone: {{ tone }}\n- existingIdeasContext: {{ existingIdeasContext }}\n- referenceContent: {{ referenceContent }}\n- contextSlotBindings: {{ contextSlotBindings }}",
+        "system": "You are a stateless blog-idea-generator agent. No toolbox joins this turn: Do NOT call any MCP tool. Follow the instructions below step-by-step. Return a single JSON object with exactly these two top-level keys:\n- \"ideas\": an array of PLAIN TEXT strings, one string per idea. The first line of every string is exactly \"Title: \" followed by that idea's title; the rest of the string is that idea in plain text.\n- \"notes\": 1-2 sentences on clustering/exclusions.\nNothing else; no markdown wrapping of the JSON; no prose preface.\n\n# Blog Idea Generator Agent\n\nYou are a stateless blog-idea generator. Take the inputs (`brief`, `audience`, `count`, `tone`, `existingIdeasContext`, `referenceContent`), run the 4 steps below, and return a single JSON object - nothing else.\n\n## Inputs\n\n- `brief: string` - REQUIRED. The topic, angle, or hook for the blog series. Free-form natural language. Examples: \"AI agents for marketing operations\", \"Self-serve onboarding patterns for B2B SaaS\", \"How CFOs evaluate AI vendor risk\".\n- `audience: string` - default `\"\"`. Target reader description. Examples: \"CMOs at SaaS companies\", \"Solo founders\", \"Engineering managers\". When empty, infer a reasonable default audience from the brief.\n- `count: number` - default `5`. How many distinct blog post ideas to generate. **Defensive cap: treat values > 10 as 10. Treat values < 1 as 1.**\n- `tone: string` - default `\"\"`. Examples: \"informative\", \"casual\", \"technical\", \"executive\", or any free-form descriptor. When empty, default to \"informative\".\n- `existingIdeasContext: array<string>` - default `[]`. Titles already covered or rejected. Avoid generating ideas that overlap with these (exact-title and topical-overlap check).\n- `referenceContent: string` - default `\"\"`. Optional seed material: a transcript excerpt, article body, interview notes, or research summary. When present, use it as inspiration BUT do not mention the reference itself, its origin, or any specific person/company names found in it.\n\nIf the caller needs web research, they should chain `@cinatra-ai/web-research-agent` first and pass its output via `referenceContent`.\n\nThe only output is the JSON envelope. Filing is declarative, not a tool call: the host files ONE `@cinatra-ai/blog-idea-artifact` per member of `ideas`, taking each artifact's title from that member's own first line behind the `Title: ` marker. A member that does not open with that marker is refused, so every member carries it.\n\n## Step-by-step recipe\n\n### Step 1 - Parse inputs\n\nRead the inputs:\n\n- Confirm `brief` is present and non-empty. If empty, return `{ideas: [], notes: \"brief is required\"}` and stop.\n- If `audience === \"\"`, infer a default audience from the brief (e.g. brief mentions \"CMOs\" -> audience is \"CMOs at SaaS companies\"; brief mentions \"developers\" -> audience is \"Software engineers\").\n- Apply defensive count caps: `effectiveCount = Math.max(1, Math.min(10, count ?? 5))`.\n- If `tone === \"\"`, default to `\"informative\"`.\n- If `existingIdeasContext` has items, build an exclusion set: lower-cased titles + any obvious topical keywords from each title (e.g. \"Pricing-page A/B testing\" exclusion blocks ideas about A/B testing pricing pages).\n- If `referenceContent` is present, read it for thematic inspiration. Identify 2-4 themes you can transform into idea seeds. **Do not** reference the source directly. **Do not** include names of specific people or companies found in it.\n\n### Step 2 - Generate `effectiveCount` distinct ideas\n\nFor each idea slot 1..effectiveCount:\n\n- Pick a distinct angle on the brief - vary the lens (how-to, framework, case study, contrarian take, data-backed insight, troubleshooting guide, taxonomy/mental-model post).\n- Match the `tone` register:\n  - `\"informative\"` - clear, factual, neutral. Titles read like reference material.\n  - `\"casual\"` - conversational, second-person. Titles read like a friend's recommendation.\n  - `\"technical\"` - precise, jargon where appropriate. Titles assume domain literacy.\n  - `\"executive\"` - strategic framing, ROI-aware, market-leadership references. Titles read at the C-suite level.\n  - free-form - match the literal descriptor (e.g. \"skeptical\", \"humorous\", \"academic\").\n- Tailor word choice + framing to `audience`. A CMO audience hears about market leverage and brand; an engineer audience hears about systems and constraints.\n- Use `referenceContent` themes (if present) as topical seeds, but always frame the idea around what the brief implies - never around the reference source itself.\n- Avoid overlap with `existingIdeasContext` exclusions.\n\n### Step 3 - Write each idea as ONE plain-text string\n\nEvery member of `ideas` is one idea, written as plain text in exactly this layout:\n\n    Title: <the idea title, at most 80 characters>\n\n    <a 1-2 sentence summary, at most 240 characters, saying what the post covers and why it matters>\n\n    Outline:\n    <the hook - why the reader should care>\n    <main point>\n    <main point>\n    <takeaway or call to action>\n\nRules for the text of a member:\n\n- The FIRST line is exactly `Title: ` followed by the title, and nothing else. The host reads the artifact's title from that line.\n- PLAIN TEXT only. No markdown at all: no `#` headings, no `-` or `*` bullets, no backticks, no fenced blocks, no tables, no links, no bold or italic markers.\n- The outline has 3-7 points, one per line, each at most 120 characters, each reading as a section header rather than a full body sentence.\n- No JSON, no key/value fields and no sub-fields inside the member - the whole idea is the text a person reads and the draft writer takes as its one input.\n\n### Step 4 - Return strict JSON\n\nReturn exactly this envelope. **No markdown wrapping. No prose preface. No closing remarks.** Both keys are top-level and always present.\n\n```json\n{\n  \"ideas\": [\n    \"Title: Five Patterns for Self-Serve Onboarding That Work\\n\\nA walkthrough of the activation milestones that make trial users feel competent in their first session.\\n\\nOutline:\\nWhy most self-serve onboarding fails in the first five minutes\\nPattern one: pre-fill the first useful state from sign-up data\\nPattern two: one step at a time, never a multi-modal walkthrough\\nPattern three: show output before asking for setup\\nMeasure first-session activation, not just sign-ups\",\n    \"Title: The Hidden Cost of Just Adding a Free Tier\\n\\nA frame for evaluating free-tier proposals against churn, support load and conversion economics.\\n\\nOutline:\\nWhy free-tier proposals get green-lit too fast\\nQuestion one: what is the marginal cost per free user\\nQuestion two: what is the conversion path, and how is it measured\\nQuestion three: what is the support burden, and who absorbs it\\nWhen a free tier is right, and when it is a distraction\"\n  ],\n  \"notes\": \"<1-2 sentences describing clustering choices, audience interpretation, or any exclusions applied>\"\n}\n```\n\n## Constraints\n\n- Titles at most 80 characters.\n- Summaries 1-2 sentences (at most 240 characters).\n- Outline 3-7 points (each at most 120 characters).\n- Respect `tone` if provided (informative / casual / technical / executive / free-form).\n- Avoid topics in `existingIdeasContext` (exact-title and topical-overlap check).\n- Never include real-person names or specific company names if `referenceContent` looks transcript-derived (inherit the `generate-blog-ideas` rule from `packages/asset-blog/skills/generate-blog-ideas/`).\n- `count` is defensively capped at 10; values > 10 are treated as 10; values < 1 are treated as 1.\n- Generate **distinct** ideas - no two titles should describe the same post arc with different wording.\n- Every member of `ideas` is plain text opening with its own `Title: ` line.\n\n## Source\n\nThese instructions are adapted from `packages/asset-blog/skills/generate-blog-ideas/SKILL.md`, which has shipped the in-app blog-idea generation since v2.x. Core directives inherited:\n\n- Return ideas useful for the audience implied by the brief, not for the reference source.\n- Do not mention transcripts, their origin, or any person or company names found in them.\n- Turn general relevant aspects of the reference into ideas framed around the brief's audience.\n\nAdapted for the OAS JSON-output contract: the original skill returned free-form prose; this version returns the strict `{ideas, notes}` envelope so callers can deterministically parse the output and the host can file each idea on its own. The original `match_when` directive (agent_id: `@cinatra-ai/wordpress-agent`/`@cinatra-ai/drupal-agent`) is dropped here - this agent is standalone and any caller can invoke it via `agent_run`.",
+        "user": "Generate count distinct blog post ideas for the brief below. Write each idea as ONE plain-text string whose first line is \"Title: \" followed by the title, then a 1-2 sentence summary, then an Outline section of 3-7 lines. Respect tone if provided. Avoid topics in existingIdeasContext.\nInputs:\n- brief: {{ brief }}\n- audience: {{ audience }}\n- count: {{ count }}\n- tone: {{ tone }}\n- existingIdeasContext: {{ existingIdeasContext }}\n- referenceContent: {{ referenceContent }}\n- contextSlotBindings: {{ contextSlotBindings }}",
         "agent_run_id": "{{ agent_run_id }}",
         "cinatra_llm": {
           "preferredProvider": "openai",
@@ -543,37 +491,9 @@
           "type": "array",
           "json_schema": {
             "items": {
-              "type": "object",
-              "properties": {
-                "title": {
-                  "type": "string"
-                },
-                "summary": {
-                  "type": "string"
-                },
-                "outline": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
-              },
-              "required": [
-                "title",
-                "summary",
-                "outline"
-              ],
-              "additionalProperties": false
+              "type": "string"
             }
           }
-        },
-        {
-          "title": "ideaBatchTitle",
-          "type": "string"
-        },
-        {
-          "title": "ideaBatchDocument",
-          "type": "string"
         },
         {
           "title": "notes",
@@ -585,7 +505,7 @@
           "riskClass": "read_only",
           "requiresApproval": false,
           "packageName": "@cinatra-ai/blog-idea-generator-agent",
-          "description": "Single ApiNode \u2192 /api/llm-bridge. The agent's operating instructions are inline in data.system (no embedded skill bundle). Single bridge invocation; this node declares an empty toolbox list in data.toolbox_ids, so the host attaches no toolbox to this turn and the model answers with the bare four-key JSON envelope. No HITL gates; the LLM returns the JSON envelope and the run completes. The host run-completion materializer then persists ideaBatchDocument as ONE @cinatra-ai/blog-idea-artifact per run via the declarative EndNode binding, not a tool call the LLM makes."
+          "description": "Single ApiNode -> /api/llm-bridge. The agent's operating instructions are inline in data.system (no embedded skill bundle). Single bridge invocation; this node declares an empty toolbox list in data.toolbox_ids, so the host attaches no toolbox to this turn and the model answers with the bare two-key JSON envelope. No HITL gates; the LLM returns the JSON envelope and the run completes. The host run-completion materializer then files ONE @cinatra-ai/blog-idea-artifact per member of ideas through the declarative fan-out EndNode binding, each titled from that member's own first line, not a tool call the LLM makes."
         }
       }
     },
@@ -599,46 +519,21 @@
           "type": "array",
           "json_schema": {
             "items": {
-              "type": "object",
-              "properties": {
-                "title": {
-                  "type": "string"
-                },
-                "summary": {
-                  "type": "string"
-                },
-                "outline": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
-              },
-              "required": [
-                "title",
-                "summary",
-                "outline"
-              ],
-              "additionalProperties": false
+              "type": "string"
             }
           },
-          "default": []
-        },
-        {
-          "title": "ideaBatchTitle",
-          "type": "string",
-          "default": ""
-        },
-        {
-          "title": "ideaBatchDocument",
-          "type": "string",
-          "default": "",
+          "default": [],
           "cinatra": {
             "artifact": {
               "extension": "@cinatra-ai/blog-idea-artifact",
-              "contentFrom": "ideaBatchDocument",
-              "declaredMime": "text/markdown",
-              "titleFrom": "ideaBatchTitle"
+              "objectTypeId": "@cinatra-ai/blog-idea-artifact:blog-idea",
+              "contentFrom": "ideas",
+              "declaredMime": "text/plain",
+              "fanOut": {
+                "mode": "member",
+                "titleFrom": "first-line",
+                "titlePrefix": "Title:"
+              }
             }
           }
         },

@@ -3,9 +3,9 @@
 //
 // A real differential provider probe on the host side isolated the failure of
 // this kind: with the platform's default toolbox attached to the bridge turn,
-// the model's answer came back missing `ideaBatchTitle` and `ideaBatchDocument`
-// entirely and the run refused downstream; with no toolbox attached, the same
-// prompt answered with all four declared keys, well formed.
+// the model's answer came back missing the declared keys entirely and the run
+// refused downstream; with no toolbox attached, the same prompt answered with
+// every declared key, well formed.
 //
 // The declaration that the host actually reads is `data.toolbox_ids` on the
 // bridge-targeting ApiNode: an omitted `toolbox_ids` in the bridge request
@@ -13,7 +13,7 @@
 // toolbox list only ever ADDS a non-empty list onto nodes that have not
 // declared their own — an empty flow-level list is a no-op and would not
 // remove anything. So a pack whose single bridge turn must answer with the
-// bare four-key JSON contract declares `"toolbox_ids": []` on the node itself,
+// bare two-key JSON contract declares `"toolbox_ids": []` on the node itself,
 // and leaves `metadata.cinatra.toolboxes` unset.
 
 import { test } from "node:test";
@@ -59,7 +59,7 @@ test("every bridge node declares an explicit, empty toolbox list", () => {
     assert.deepEqual(
       data.toolbox_ids,
       [],
-      `node ${id}: data.toolbox_ids must be exactly [] — this turn answers with the bare four-key JSON contract and calls no tool`,
+      `node ${id}: data.toolbox_ids must be exactly [] — this turn answers with the bare two-key JSON contract and calls no tool`,
     );
   }
 });
@@ -80,7 +80,7 @@ test("the toolbox declaration is not parked where the host would not read it", (
   assert.deepEqual(strays, [], `toolboxes declared on component metadata (${strays.join(", ")}) instead of on the node's data.toolbox_ids`);
 });
 
-test("the generate node's prompt states the four-key contract and matches the declared outputs", () => {
+test("the generate node's prompt states the two-key contract and matches the declared outputs", () => {
   const generate = oas.$referenced_components.generate;
   assert.equal(generate.component_type, "ApiNode");
   const system = generate.data && generate.data.system;
@@ -88,21 +88,29 @@ test("the generate node's prompt states the four-key contract and matches the de
 
   // The operative instruction, not an incidental mention somewhere in the
   // prompt's examples: the opening sentence that fixes the envelope.
-  const contractLine = "Return a single JSON object with exactly these four top-level keys:";
-  assert.ok(system.includes(contractLine), "the system prompt must state the four-key contract up front");
+  const contractLine = "Return a single JSON object with exactly these two top-level keys:";
+  assert.ok(system.includes(contractLine), "the system prompt must state the two-key contract up front");
   const head = system.slice(system.indexOf(contractLine), system.indexOf(contractLine) + 1200);
-  for (const key of ["ideas", "ideaBatchTitle", "ideaBatchDocument", "notes"]) {
-    assert.ok(head.includes(`"${key}"`), `the four-key contract must name the declared output ${key}`);
+  for (const key of ["ideas", "notes"]) {
+    assert.ok(head.includes(`"${key}"`), `the two-key contract must name the declared output ${key}`);
   }
   assert.ok(
     /no markdown wrapping of the JSON/i.test(system) && /no prose preface/i.test(system),
     "the prompt must forbid fencing and a prose preface around the JSON envelope",
   );
 
-  assert.deepEqual(
-    generate.outputs.map((o) => o.title).sort(),
-    ["ideaBatchDocument", "ideaBatchTitle", "ideas", "notes"],
-  );
+  assert.deepEqual(generate.outputs.map((o) => o.title).sort(), ["ideas", "notes"]);
+});
+
+test("the retired idea-batch keys are named nowhere in the pack's flow", () => {
+  const whole = JSON.stringify(oas);
+  for (const retired of ["ideaBatchTitle", "ideaBatchDocument"]) {
+    assert.equal(
+      whole.includes(retired),
+      false,
+      `${retired} is retired: the ideas are filed one by one, never as one batch document`,
+    );
+  }
 });
 
 // A node that declares an empty toolbox list must also SAY so in its own

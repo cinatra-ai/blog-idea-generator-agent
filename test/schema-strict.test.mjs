@@ -93,13 +93,12 @@ for (const [label, output] of ideasSchemaLocations) {
     assert.deepEqual(violations, [], violations.join("\n"));
   });
 
-  test(`declared 'ideas' item schema at ${label} matches the prompt's real idea shape`, () => {
+  test(`declared 'ideas' item schema at ${label} is a plain string member`, () => {
+    // The ideas are plain text — one piece per idea, its first line the title.
+    // No object member, no sub-fields for the host or the draft writer to
+    // dissect, and no level of the bound list left undeclared.
     const items = output.json_schema.items;
-    assert.equal(items.type, "object");
-    assert.deepEqual(Object.keys(items.properties).sort(), ["outline", "summary", "title"]);
-    assert.equal(items.properties.title.type, "string");
-    assert.equal(items.properties.summary.type, "string");
-    assert.equal(items.properties.outline.type, "array");
-    assert.equal(items.properties.outline.items.type, "string");
+    assert.equal(items.type, "string");
+    assert.equal(items.properties, undefined);
   });
 }
