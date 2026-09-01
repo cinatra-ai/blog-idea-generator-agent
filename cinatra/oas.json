@@ -29,7 +29,8 @@
       ],
       "produces": [
         {
-          "extension": "@cinatra-ai/blog-idea-artifact"
+          "extension": "@cinatra-ai/blog-idea-artifact",
+          "objectTypeId": "@cinatra-ai/blog-idea-artifact:blog-idea"
         }
       ]
     }
