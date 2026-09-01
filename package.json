@@ -1,8 +1,8 @@
 {
   "name": "@cinatra-ai/blog-idea-generator-agent",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "license": "Apache-2.0",
-  "description": "Stateless leaf agent that takes a blog brief plus optional context (audience, count, tone, existing ideas, reference content) and returns count blog post ideas with title + summary + 3-7 outline points each, plus a single markdown idea-batch document (ideaBatchTitle, ideaBatchDocument) that the host persists as a @cinatra-ai/blog-idea-artifact. No HITL. Single bridge invocation; the bridge node declares an empty toolbox list (data.toolbox_ids: []), so the host attaches no toolbox to the turn and the answer follows the node's own JSON contract. Returns strict JSON {ideas:[{title,summary,outline}], ideaBatchTitle, ideaBatchDocument, notes}.",
+  "description": "Stateless leaf agent that takes a blog brief plus optional context (audience, count, tone, existing ideas, reference content) and returns count blog post ideas as plain text, one string per idea, each opening with its own \"Title: \" line. The host files one @cinatra-ai/blog-idea-artifact per idea through the fan-out EndNode binding. No HITL. Single bridge invocation; the bridge node declares an empty toolbox list (data.toolbox_ids: []), so the host attaches no toolbox to the turn and the answer follows the node's own JSON contract. Returns strict JSON {ideas:[plain-text strings], notes}.",
   "type": "module",
   "scripts": {
     "test": "sh -c \"node --test\""
@@ -41,7 +41,8 @@
     },
     "produces": [
       {
-        "extension": "@cinatra-ai/blog-idea-artifact"
+        "extension": "@cinatra-ai/blog-idea-artifact",
+        "objectTypeId": "@cinatra-ai/blog-idea-artifact:blog-idea"
       }
     ],
     "consumes": [],
